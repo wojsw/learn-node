@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Hello World</h1>
+    <div id="loginButton" style="cursor: pointer;">
+        登录
+    </div>
+</body>
+</html>
+
+<script>
+    // 处理登录区域点击事件的函数。
+    function handleLoginClick() {
+        console.log("点击了登录按钮");
+    }
+
+    async function init() {
+        try {
+            // 获取登录区域节点，用于绑定点击事件。
+            const loginButton = document.getElementById("loginButton");
+
+            // 节点存在时才绑定事件，避免页面结构变化导致脚本报错。
+            if (loginButton) {
+                loginButton.addEventListener("click", handleLoginClick);
+            }
+
+            const response = await fetch("http://localhost:3000");
+            const data = await response.text();
+            console.log("服务器响应:", data);
+        } catch (error) {
+            console.error("请求失败:", error);
+        }
+    }
+
+    init();
+</script>
