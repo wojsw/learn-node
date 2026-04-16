@@ -2,18 +2,43 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { JWT_SECRET, REFRESH_TOKEN_SECRET } from "../config/jwt.js";
-
+import { pool } from "../db/index.js";
 
 const refreshTokenMap = new Map();
 
 export function createAuthRoute() {
     const authRouter = express.Router();
 
-    authRouter.post("/login", (req, res) => {
+    authRouter.post("/login", async (req, res) => {
         const tokenId = crypto.randomUUID();
         const params = req.body;
 
-        if (params.username === "admin" && params.password === "123456") {
+        try {
+            const result = await pool.query(
+                "SELECT * FROM users WHERE username = $1",
+                [params.username]
+            )
+
+            console.log('result = ', result);
+
+            if (result.rows.length === 0) {
+                res.status(200).json({
+                    code: 0,
+                    success: false,
+                    message: "user not found"
+                })
+                return
+            }
+            
+            const user = result.rows[0];
+            if (user.password !== params.password) {
+                res.status(200).json({
+                    code: 0,
+                    success: false,
+                    message: "password incorrect"
+                })
+                return
+            }
             const refreshToken = jwt.sign(
                 {
                     username: params.username,
@@ -46,12 +71,13 @@ export function createAuthRoute() {
                     refreshToken: refreshToken
                 }   
             })
-        } else {
+        } catch (error) {
             res.status(200).json({
                 code: 0,
                 success: false,
                 message: "failed"
             })
+            return
         }
     });
 
