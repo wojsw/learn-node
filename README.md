@@ -18,11 +18,16 @@ psql -U "$(whoami)" -d postgres
 
 \du
 
+## 查看当前用户数据库
+
+psql交互状态 \list
+psql -U jinshengwang -l
+
 ## 进入数据库
 
 psql -U jinshengwang -d database-name
 
-## 创建表
+创建表
 
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,

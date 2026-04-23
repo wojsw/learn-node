@@ -16,6 +16,16 @@
     <div id="refreshTokenButton" style="cursor: pointer;">
         刷新Token
     </div>
+
+    <hr />
+    <h2>头像</h2>
+    <!-- 未上传或加载失败时可显示占位 -->
+    <img id="avatarPreview" alt="用户头像" width="120" height="120" style="object-fit: cover; border-radius: 8px; border: 1px solid #ccc;" />
+    <div style="margin-top: 8px;">
+        <!-- 选择本地图片文件，由脚本读取并上传 -->
+        <input id="avatarFileInput" type="file" accept="image/jpeg,image/png,image/gif,image/webp" />
+        <button id="uploadAvatarButton" type="button">上传头像</button>
+    </div>
 </body>
 </html>
 
@@ -26,6 +36,32 @@
     let refreshToken = null;
     // 统一维护服务端接口基础地址，避免重复硬编码。
     const API_BASE_URL = "http://localhost:3000";
+
+    /**
+     * 上传 multipart 时使用：只带鉴权头，不设 Content-Type，交给浏览器自动补 boundary。
+     * @param {string | null} token 访问令牌
+     */
+    function createMultipartAuthHeaders(token) {
+        const headers = {};
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+        return headers;
+    }
+
+    /**
+     * 将接口返回的相对路径头像地址拼成可在 img 中直接请求的绝对 URL。
+     * @param {string | null | undefined} avatarUrl 形如 /uploads/avatars/xxx.png
+     */
+    function resolveAvatarSrc(avatarUrl) {
+        if (!avatarUrl) {
+            return "";
+        }
+        if (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://")) {
+            return avatarUrl;
+        }
+        return `${API_BASE_URL}${avatarUrl}`;
+    }
 
     // 生成默认请求头；当存在令牌时自动补充 Authorization 字段。
     function createRequestHeaders(token) {
@@ -125,12 +161,69 @@
         updateTokenStore(data);
     }
 
+    /**
+     * 根据接口返回更新页面上的头像预览区域。
+     * @param {string | null | undefined} avatarUrl 服务端存储的相对或绝对路径
+     */
+    function applyAvatarToPreview(avatarUrl) {
+        const img = document.getElementById("avatarPreview");
+        if (!img) {
+            return;
+        }
+        const src = resolveAvatarSrc(avatarUrl);
+        if (src) {
+            img.src = src;
+        } else {
+            img.removeAttribute("src");
+        }
+    }
+
     // 获取用户信息；当访问令牌过期返回 401 时自动刷新后重试。
     async function getUserInformation() {
-        await requestWithAutoRefresh(`${API_BASE_URL}/api/user/information`, {
+        const response = await requestWithAutoRefresh(`${API_BASE_URL}/api/user/information`, {
             method: "GET",
             headers: createRequestHeaders(accessToken),
         });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) {
+            console.error("获取用户信息失败", payload);
+            return;
+        }
+        const { username, avatarUrl } = payload.data || {};
+        console.log("当前用户", username, avatarUrl);
+        applyAvatarToPreview(avatarUrl);
+    }
+
+    /**
+     * 将已选择的文件以 multipart 字段名 avatar 提交到服务端。
+     */
+    async function handleUploadAvatarClick() {
+        const input = document.getElementById("avatarFileInput");
+        if (!input || !input.files || input.files.length === 0) {
+            alert("请先选择一张图片");
+            return;
+        }
+        if (!accessToken) {
+            alert("请先登录");
+            return;
+        }
+
+        const formData = new FormData();
+        // 字段名需与后端 uploadAvatar.single('avatar') 一致
+        formData.append("avatar", input.files[0]);
+
+        const response = await requestWithAutoRefresh(`${API_BASE_URL}/api/user/upload-avatar`, {
+            method: "POST",
+            headers: createMultipartAuthHeaders(accessToken),
+            body: formData,
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.success) {
+            alert(payload.message || "上传失败");
+            return;
+        }
+        applyAvatarToPreview(payload.data.avatarUrl);
+        alert("上传成功");
     }
 
     // 手动触发刷新令牌逻辑，保留原有按钮行为不变。
@@ -159,6 +252,11 @@
             const refreshTokenButton = document.getElementById("refreshTokenButton");
             if (refreshTokenButton) {
                 refreshTokenButton.addEventListener("click", refreshTokenHandle);
+            }
+
+            const uploadAvatarButton = document.getElementById("uploadAvatarButton");
+            if (uploadAvatarButton) {
+                uploadAvatarButton.addEventListener("click", handleUploadAvatarClick);
             }
 
         } catch (error) {

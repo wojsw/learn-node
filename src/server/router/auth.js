@@ -71,6 +71,7 @@ export function createAuthRoute() {
                     refreshToken: refreshToken
                 }   
             })
+            
         } catch (error) {
             res.status(200).json({
                 code: 0,
