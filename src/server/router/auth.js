@@ -3,11 +3,14 @@ import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { JWT_SECRET, REFRESH_TOKEN_SECRET } from "../config/jwt.js";
 import { pool } from "../db/index.js";
+import { connectRedis } from "../../redis/client.js";
 
-const refreshTokenMap = new Map();
+const key = (tokenId) => `refresh:${tokenId}`;
 
-export function createAuthRoute() {
+
+export async function createAuthRoute() {
     const authRouter = express.Router();
+    const redisClient = await connectRedis();
 
     authRouter.post("/login", async (req, res) => {
         const tokenId = crypto.randomUUID();
@@ -61,7 +64,7 @@ export function createAuthRoute() {
                     expiresIn: '1m'
                 }
             )
-            refreshTokenMap.set(tokenId, refreshToken);
+            redisClient.set(key(tokenId), refreshToken, { EX: 604800 });
             res.status(200).json({
                 code: 1,
                 success: true,
@@ -82,7 +85,7 @@ export function createAuthRoute() {
         }
     });
 
-    authRouter.post('/refresh', (req, res) => {
+    authRouter.post('/refresh', async(req, res) => {
         const authorization = req.body.authorization;
         if (!authorization) {
             res.status(401).json({
@@ -94,11 +97,21 @@ export function createAuthRoute() {
         }
 
         try {
+            const refreshToken = await redisClient.get(key(tokenId));
+            if (!refreshToken || refreshToken !== authorization) {
+                res.status(401).json({
+                    code: 0,
+                    success: false,
+                    message: "refresh token invalid"
+                })
+                return
+            }
+
             const decoded = jwt.verify(authorization, REFRESH_TOKEN_SECRET);
             const tokenId = decoded.tokenId;
             console.log('refresh token decoded = ', decoded);
 
-            refreshTokenMap.delete(tokenId)
+            redisClient.del(key(tokenId));
 
             const newRefreshToken = jwt.sign(
                 {
@@ -122,7 +135,7 @@ export function createAuthRoute() {
                     expiresIn: '1m'
                 }
             )
-            refreshTokenMap.set(tokenId, newRefreshToken);
+            redisClient.set(key(tokenId), newRefreshToken, { EX: 604800 });
             res.status(200).json({
                 code: 1,
                 success: true, 
